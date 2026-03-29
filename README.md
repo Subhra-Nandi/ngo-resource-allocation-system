@@ -1,4 +1,4 @@
-# NGO Resource Allocation Platform
+# NGO Resource Allocation System
 
 > Bridging the gap between unstructured field data and life-saving decisions.
 
