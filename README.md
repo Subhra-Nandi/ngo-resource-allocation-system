@@ -1,56 +1,107 @@
 # NGO Resource Allocation System
 
-> Bridging the gap between unstructured field data and life-saving decisions.
+> Connect people in crisis to the nearest NGO with available resources — instantly.
 
 ---
 
 ## Problem Statement
 
-When disasters strike — floods, cyclones, droughts — NGOs face a chaotic information crisis. Field workers collect data through paper surveys, voice notes, and photographs. This data sits in disconnected silos: WhatsApp messages, physical forms, verbal reports. By the time it reaches a decision-maker, it is hours old, incomplete, and impossible to compare across regions.
+During disasters, two critical problems happen simultaneously. Field workers and affected people have no fast way to report their needs — they rely on paper forms, phone calls, and WhatsApp messages that take hours to reach decision-makers. And NGOs have no live view of their own stock — food packs, medical kits, and vehicles are tracked in spreadsheets that are almost always outdated.
 
-The result: resources get sent where they were needed yesterday, not where they are needed now. Duplicate aid reaches some zones while others are completely missed. Teams operate on gut instinct rather than ground truth.
-
-The core problem is not a lack of data — it is that the data is **unstructured, decentralized, and analog**, making real-time resource allocation nearly impossible.
+The result: people in need cannot find help, and NGOs dispatch resources without knowing what is actually available or where it is most needed.
 
 ---
 
 ## Solution Overview
 
-The NGO Resource Allocation Platform is a full-stack AI system that converts raw, messy field inputs — images of paper forms, voice notes, typed messages — into a live, prioritized, geospatial intelligence dashboard that tells NGO coordinators exactly where to send resources and why.
+A web platform with two distinct sides — one for affected users requesting help, one for NGOs managing and dispatching resources.
 
-Field workers submit reports from any device using a mobile-first web app. The platform automatically processes each submission through an AI pipeline: OCR extracts text from images, Whisper transcribes voice notes, and a two-stage LLM agent extracts structured entities and maps them to a validated schema. Every validated report is scored, classified by resource type, and surfaced on a real-time dashboard within seconds.
+A user opens the app, describes their need, and shares their GPS location. The platform validates the request through two gates: first confirming the need is genuine, then checking whether matching stock exists in the NGO resource database. If both pass, a PostGIS-powered GPS engine finds the nearest NGO depot with the right resources available and returns the NGO's contact details and estimated response time to the user. The matched NGO receives an alert on their dashboard with the task details, and their stock is automatically depleted on dispatch.
 
-A Decision Agent powered by RAG (Retrieval-Augmented Generation) queries similar historical situations to generate specific allocation recommendations. A Simulation Engine lets coordinators test proposed resource changes and see projected impact before committing — a what-if sandbox for disaster response.
+On the NGO side, coordinators use an admin panel to log and update their available resources — food, medicine, shelter materials, vehicles — by depot location. A priority dashboard shows a live map of incoming requests ranked by severity and distance.
 
-**Stack:** FastAPI · PostgreSQL + PostGIS · Redis · Azure OpenAI (GPT-4o / GPT-4o mini) · Azure Whisper · React / Next.js · Leaflet · Recharts · FAISS
+The entire backend is powered by GPT-4o via GitHub's free model API (using a GitHub Personal Access Token routed through the Azure inference endpoint), keeping costs at zero while retaining full GPT-4o quality.
+
+**Stack:** FastAPI · PostgreSQL + PostGIS · Redis · GPT-4o via GitHub Models API · Tesseract OCR · Whisper STT · React / Next.js · Leaflet · Recharts · Railway · Vercel
 
 ---
 
 ## Features
 
+### Dual-database architecture
+Two separate databases with clear ownership: the NGO Resource DB stores stock, depot locations, and expiry data — owned and updated by NGO admins. The User Reports DB stores submitted field reports and help requests with GPS coordinates and severity scores. They are joined only at the matching layer, keeping concerns cleanly separated.
+
 ### Multi-modal field data ingestion
-Field workers submit reports as images (photos of paper forms), voice recordings, or plain text. All three paths converge into a single normalized text pipeline with automatic language detection — supporting English, Hindi, Bengali, and other Indian languages out of the box.
+Field workers submit reports as images of paper forms, voice notes, or typed text. OCR, Whisper STT, and a text handler all converge into a single AI Structuring Agent that normalizes and extracts structured entities — location, need type, affected count, severity — into both databases.
 
-### AI structuring pipeline
-A two-stage LLM agent pipeline first extracts raw entities (locations, affected counts, time references, urgency signals) and then maps them to a strict Pydantic schema with confidence scoring. A validation layer flags low-confidence records for human review and retries failed extractions with enriched context, keeping data quality high.
+### Two-stage request validation
+When a user requests help, two sequential checks run before any NGO is contacted. The first confirms the request is genuine and the need is real (AI-powered classification). The second queries the NGO Resource DB to verify that matching stock actually exists. Requests that fail either gate are flagged or placed on a waitlist — no phantom dispatches.
 
-### Geospatial priority scoring
-Every validated report is scored using a weighted formula across severity, recency, affected population, and remoteness. Scores are cached in Redis and updated continuously. Regions are ranked so coordinators always know the highest-priority situation at a glance.
+### GPS-powered nearest NGO matching
+Using PostGIS spatial queries, the platform calculates the distance between the user's GPS coordinates and every NGO depot that holds the requested resource type. It returns the closest match with sufficient stock, along with an estimated response time. Users see the matched NGO's name, address, and contact — not an abstract recommendation.
 
-### Resource need classification
-Reports are automatically grouped by resource type — Food & Water, Medical, Shelter, WASH, Psychosocial — and aggregated per region. Each NGO department sees only the category relevant to their team.
+### Live resource inventory management
+NGO admins log available stock through a simple admin panel: item name, category, quantity, unit, depot location (pin on map), and expiry date. When a dispatch is accepted, inventory is automatically depleted via a database transaction with row-level locking to prevent double-allocation.
 
-### RAG-powered decision agent
-The Decision Agent retrieves semantically similar past situations from a FAISS vector store and uses them as context to generate specific, explainable allocation recommendations: what resource, how much, to which region, and why.
+### NGO priority dashboard
+A React dashboard shows NGO coordinators a Leaflet map with incoming request pins ranked by severity and proximity to their depots, a pending task list, and a stock status panel with low-inventory warnings.
 
-### Simulation engine
-Coordinators can propose a resource reallocation — "what if I redirect two food trucks from Zone A to Zone C?" — and instantly see projected changes to priority scores across all regions. Decisions can be tested before real resources move.
+### Zero-cost GPT-4o via GitHub Models API
+All AI agents use GPT-4o through GitHub's free model inference endpoint, authenticated with a GitHub Personal Access Token. No OpenAI billing account or Azure subscription required for the AI layer.
 
-### Real-time dashboard
-A live React dashboard shows a Leaflet map with report pins color-coded by severity, a priority-ranked situation list, need-type breakdown charts, trend graphs, and a simulation panel — all updating in real time via Server-Sent Events.
+### Deploy-first architecture
+The system is designed to be fully deployable before the chat interface or WebSocket layer is built. Phase 1 through 5 produce a working, live URL. Real-time features are additive enhancements, not prerequisites.
 
-### Human-in-the-loop feedback
-When a coordinator overrides a recommendation, the correction is logged with a reason and fed back into the system as a training signal. The platform improves with every human correction.
+---
 
+<<<<<<< HEAD
 ### Error handling & observability
 Invalid or ambiguous reports are routed to an error queue with structured flags rather than silently dropped. Every pipeline stage emits structured logs so the team can trace any report from raw input to dashboard pin.
+=======
+## Architecture
+```
+Field worker app          Affected user app
+      │                         │
+      └──────── API Gateway ────┘
+                    │
+          AI Structuring Agent
+          (OCR / STT / Text → JSON)
+           /                    \
+  NGO Resource DB          User Reports DB
+  (stock · depot · expiry)  (reports · GPS · severity)
+                                 │
+                    User submits help request + GPS
+                                 │
+                    Validation 1 — need check (AI)
+                                 │
+                    Validation 2 — stock check (DB)
+                                 │
+                    GPS nearest NGO finder (PostGIS)
+                                 │
+                    Match + ETA engine
+                         /             \
+             User gets NGO details    NGO gets alert + task
+                                           │
+                                    NGO admin panel
+                                    (updates stock)
+```
+
+---
+
+## GPT-4o via GitHub Models API (free)
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://models.inference.ai.azure.com",
+    api_key="YOUR_GITHUB_PAT_TOKEN",
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "your prompt"}],
+)
+```
+
+No billing. No Azure subscription. Just a GitHub account with a PAT token that has the `models:read` scope.
+>>>>>>> fdcc4a8 (Updated README and LLD diagram with improved architecture)
