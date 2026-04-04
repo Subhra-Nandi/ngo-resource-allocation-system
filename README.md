@@ -54,10 +54,6 @@ The system is designed to be fully deployable before the chat interface or WebSo
 
 ---
 
-<<<<<<< HEAD
-### Error handling & observability
-Invalid or ambiguous reports are routed to an error queue with structured flags rather than silently dropped. Every pipeline stage emits structured logs so the team can trace any report from raw input to dashboard pin.
-=======
 ## Architecture
 ```
 Field worker app          Affected user app
@@ -104,4 +100,3 @@ response = client.chat.completions.create(
 ```
 
 No billing. No Azure subscription. Just a GitHub account with a PAT token that has the `models:read` scope.
->>>>>>> fdcc4a8 (Updated README and LLD diagram with improved architecture)

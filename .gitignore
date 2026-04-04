@@ -1,0 +1,52 @@
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+backend/venv/
+# ── Environment / Secrets ───────────────────────────────────
+.env
+.env.local
+.env.production
+*.env
+
+# ── Node / Next.js ──────────────────────────────────────────
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-error.log*
+
+# ── Docker ──────────────────────────────────────────────────
+# (docker-compose.yml IS committed — it's not secret)
+
+# ── Database ────────────────────────────────────────────────
+*.db
+*.sqlite
+
+# ── IDE ─────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Uploads / temp files ─────────────────────────────────────
+uploads/
+tmp/
+*.wav
+*.mp3
+*.jpg
+*.png
