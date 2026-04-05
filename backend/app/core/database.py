@@ -3,31 +3,35 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-# Async engine — used by all API routes
+# Strip any query parameters from the URL and add SSL via connect_args instead
+# This avoids asyncpg rejecting ?sslmode= or ?ssl= in the connection string
+def _make_url(url: str) -> str:
+    """Remove SSL query params from URL — we pass SSL via connect_args instead."""
+    if "?" in url:
+        url = url.split("?")[0]
+    return url
+
 engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.APP_ENV == "development",  # logs SQL in dev
-    pool_pre_ping=True,                       # checks connection health
+    _make_url(settings.DATABASE_URL),
+    echo=settings.APP_ENV == "development",
+    pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
+    connect_args={"ssl": "require"},  # Neon requires SSL — passed directly to asyncpg
 )
 
-# Session factory — produces individual DB sessions
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
-    expire_on_commit=False,  # keeps objects usable after commit
+    expire_on_commit=False,
     autoflush=False,
 )
 
 
-# Base class for all ORM models
 class Base(DeclarativeBase):
     pass
 
 
-# Dependency injected into every route that needs DB access
-# Usage in routes:  async def my_route(db: AsyncSession = Depends(get_db))
 async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         try:

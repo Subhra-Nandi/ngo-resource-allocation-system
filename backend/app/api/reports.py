@@ -1,43 +1,73 @@
 import uuid
-from datetime import datetime
 
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db
+from app.models.user_report import ReportStatus, UserReport
+from app.schemas.report import ReportAccepted, ReportStatusResponse, ReportSubmit
 
-class ReportSubmit(BaseModel):
-    """What a field worker or affected user sends."""
-    description: str = Field(..., min_length=5)
-    need_type: str | None = Field(None, pattern="^(FOOD|MEDICAL|SHELTER|WASH|OTHER)$")
-    lat: float | None = Field(None, ge=-90, le=90)
-    lng: float | None = Field(None, ge=-180, le=180)
-    location_name: str | None = None
-    affected_count: int | None = Field(None, ge=1)
-    severity: int | None = Field(None, ge=1, le=5)
-    source: str = Field(default="affected_user", pattern="^(field_worker|affected_user)$")
+router = APIRouter(prefix="/requests", tags=["requests"])
 
-
-class ReportAccepted(BaseModel):
-    """Returned immediately on submit — user polls status with request_id."""
-    request_id: uuid.UUID
-    status: str
-    message: str
+STATUS_MESSAGES = {
+    "pending":    "Your request is being processed.",
+    "validating": "Verifying your request and checking resources.",
+    "matched":    "An NGO has been matched to your request.",
+    "waitlist":   "Resources unavailable right now. You are on the waitlist.",
+    "flagged":    "Your request needs manual review.",
+    "dispatched": "Resources are on the way.",
+    "completed":  "Request fulfilled.",
+}
 
 
-class MatchedNgo(BaseModel):
-    ngo_name: str
-    depot_address: str | None
-    contact_phone: str | None
-    resource_name: str
-    quantity_available: int
-    eta_minutes: int
-    distance_km: float
+@router.post("/submit", status_code=202, response_model=ReportAccepted)
+async def submit_request(
+    data: ReportSubmit,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    gps_wkt = None
+    if data.lat and data.lng:
+        gps_wkt = f"SRID=4326;POINT({data.lng} {data.lat})"
+
+    report = UserReport(
+        source=data.source,
+        user_gps=gps_wkt,
+        location_name=data.location_name,
+        need_type=data.need_type,
+        description=data.description,
+        severity=data.severity,
+        affected_count=data.affected_count,
+        status=ReportStatus.PENDING,
+    )
+    db.add(report)
+    await db.flush()
+
+    return ReportAccepted(
+        request_id=report.id,
+        status=ReportStatus.PENDING,
+        message="Request received. Processing in progress.",
+    )
 
 
-class ReportStatusResponse(BaseModel):
-    request_id: uuid.UUID
-    status: str
-    message: str
-    matched_ngo: MatchedNgo | None = None
-    created_at: datetime
+@router.get("/{report_id}/status", response_model=ReportStatusResponse)
+async def get_request_status(
+    report_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(UserReport).where(UserReport.id == report_id)
+    )
+    report = result.scalar_one_or_none()
 
-    model_config = {"from_attributes": True}
+    if not report:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    return ReportStatusResponse(
+        request_id=report.id,
+        status=report.status,
+        message=STATUS_MESSAGES.get(report.status, "Processing."),
+        matched_ngo=None,
+        created_at=report.created_at,
+    )
