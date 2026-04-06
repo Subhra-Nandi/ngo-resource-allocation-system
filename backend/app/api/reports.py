@@ -7,12 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.user_report import ReportStatus, UserReport
 from app.schemas.report import ReportAccepted, ReportStatusResponse, ReportSubmit
+from app.services.ingestion import process_text_report
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 
 STATUS_MESSAGES = {
     "pending":    "Your request is being processed.",
-    "validating": "Verifying your request and checking resources.",
+    "validating": "Verifying your request with AI.",
     "matched":    "An NGO has been matched to your request.",
     "waitlist":   "Resources unavailable right now. You are on the waitlist.",
     "flagged":    "Your request needs manual review.",
@@ -43,11 +44,21 @@ async def submit_request(
     )
     db.add(report)
     await db.flush()
+    report_id = str(report.id)
+    await db.commit()
+
+    # Fire AI pipeline in background — user gets 202 immediately
+    if data.description:
+        background_tasks.add_task(
+            process_text_report,
+            report_id,
+            data.description,
+        )
 
     return ReportAccepted(
         request_id=report.id,
         status=ReportStatus.PENDING,
-        message="Request received. Processing in progress.",
+        message="Request received. AI processing started.",
     )
 
 
