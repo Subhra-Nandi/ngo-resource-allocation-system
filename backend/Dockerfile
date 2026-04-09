@@ -8,14 +8,6 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-ben \
     tesseract-ocr-hin \
     ffmpeg \
-    pkg-config \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavutil-dev \
-    libswscale-dev \
-    libswresample-dev \
-    libavfilter-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
