@@ -1,12 +1,12 @@
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user_report import ReportStatus, UserReport
-from app.schemas.report import ReportAccepted, ReportStatusResponse, ReportSubmit
+from app.schemas.report import ReportAccepted, ReportStatusResponse, ReportSubmit, MatchedNgo
 from app.services.ingestion import process_text_report
 
 router = APIRouter(prefix="/requests", tags=["requests"])
@@ -47,13 +47,8 @@ async def submit_request(
     report_id = str(report.id)
     await db.commit()
 
-    # Fire AI pipeline in background — user gets 202 immediately
     if data.description:
-        background_tasks.add_task(
-            process_text_report,
-            report_id,
-            data.description,
-        )
+        background_tasks.add_task(process_text_report, report_id, data.description)
 
     return ReportAccepted(
         request_id=report.id,
@@ -71,14 +66,63 @@ async def get_request_status(
         select(UserReport).where(UserReport.id == report_id)
     )
     report = result.scalar_one_or_none()
-
     if not report:
         raise HTTPException(status_code=404, detail="Request not found")
+
+    matched_ngo = None
+
+    # If matched, fetch NGO details
+    if report.status == ReportStatus.MATCHED and report.matched_ngo_id:
+        from app.models.ngo_resource import NgoResource, NgoUser
+        ngo_result = await db.execute(
+            select(NgoUser, NgoResource)
+            .join(NgoResource, NgoResource.ngo_id == NgoUser.id)
+            .where(
+                NgoUser.id == report.matched_ngo_id,
+                NgoResource.id == report.matched_resource_id,
+            )
+        )
+        row = ngo_result.first()
+        if row:
+            ngo, resource = row
+            matched_ngo = MatchedNgo(
+                ngo_name=ngo.ngo_name,
+                depot_address=resource.depot_address,
+                contact_phone=ngo.contact_phone,
+                resource_name=resource.name,
+                quantity_available=resource.quantity,
+                eta_minutes=report.eta_minutes or 0,
+                distance_km=report.distance_km or 0.0,
+            )
 
     return ReportStatusResponse(
         request_id=report.id,
         status=report.status,
         message=STATUS_MESSAGES.get(report.status, "Processing."),
-        matched_ngo=None,
+        matched_ngo=matched_ngo,
         created_at=report.created_at,
     )
+
+
+@router.get("/debug/latest")
+async def debug_latest(db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import desc
+    result = await db.execute(
+        select(UserReport).order_by(desc(UserReport.created_at)).limit(5)
+    )
+    reports = result.scalars().all()
+    return [
+        {
+            "id": str(r.id),
+            "status": r.status,
+            "need_type": r.need_type,
+            "severity": r.severity,
+            "description": r.description,
+            "ai_confidence": r.ai_confidence,
+            "ai_flag_reason": r.ai_flag_reason,
+            "matched_ngo_id": str(r.matched_ngo_id) if r.matched_ngo_id else None,
+            "eta_minutes": r.eta_minutes,
+            "distance_km": r.distance_km,
+        }
+        for r in reports
+    ]
