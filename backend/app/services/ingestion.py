@@ -1,55 +1,29 @@
 import uuid
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.agents.structuring import structure_report
-from app.agents.validation import validate_need
+from sqlalchemy import update
 from app.core.database import AsyncSessionLocal
 from app.models.user_report import ReportStatus, UserReport
+from app.agents.structuring import structure_report
 from app.processors.text import normalize_text
 
 
 async def process_text_report(report_id: str, raw_text: str):
     """
-    Full pipeline for text input:
-    normalize → structure → validate → update DB status
-    Called as a background task from the API layer.
+    Full pipeline:
+    normalize → AI structure → save → trigger validation gates
     """
+    print(f"=== PROCESSING REPORT {report_id} ===")
     async with AsyncSessionLocal() as db:
         try:
-            # Step 1 — Update status to validating
-            await db.execute(
-                update(UserReport)
-                .where(UserReport.id == uuid.UUID(report_id))
-                .values(status=ReportStatus.VALIDATING)
-            )
-            await db.commit()
-
-            # Step 2 — Normalize text
+            # Step 1 — normalize
             normalized = normalize_text(raw_text, source_type="text")
             clean = normalized["text"]
+            print(f"Normalized text: {clean[:80]}")
 
-            # Step 3 — AI structuring agent
+            # Step 2 — AI structure
             structured = structure_report(clean)
+            print(f"Structured: {structured}")
 
-            # Step 4 — Validation gate 1 (is this genuine?)
-            validation = validate_need(clean)
-
-            if not validation["is_valid"] and validation["confidence"] > 0.8:
-                # Clearly not a valid request
-                await db.execute(
-                    update(UserReport)
-                    .where(UserReport.id == uuid.UUID(report_id))
-                    .values(
-                        status=ReportStatus.FLAGGED,
-                        ai_confidence=validation["confidence"],
-                        ai_flag_reason=validation["reason"],
-                    )
-                )
-                await db.commit()
-                return
-
-            # Step 5 — Update report with structured data
+            # Step 3 — save structured data
             await db.execute(
                 update(UserReport)
                 .where(UserReport.id == uuid.UUID(report_id))
@@ -60,17 +34,26 @@ async def process_text_report(report_id: str, raw_text: str):
                     description=structured.get("description"),
                     location_name=structured.get("location_name"),
                     ai_confidence=structured.get("confidence"),
-                    status=ReportStatus.PENDING,  # ready for GPS matching in Phase 4
+                    status=ReportStatus.PENDING,
                 )
             )
             await db.commit()
-            print(f"Report {report_id} processed successfully")
+
+            # Step 4 — run validation gates (Phase 3)
+            from app.services.validation import run_validation_gates
+            await run_validation_gates(report_id)
 
         except Exception as e:
-            print(f"Error processing report {report_id}: {e}")
-            await db.execute(
-                update(UserReport)
-                .where(UserReport.id == uuid.UUID(report_id))
-                .values(status=ReportStatus.FLAGGED, ai_flag_reason=str(e))
-            )
-            await db.commit()
+            print(f"=== ERROR processing {report_id}: {e} ===")
+            import traceback
+            traceback.print_exc()
+            async with AsyncSessionLocal() as db2:
+                await db2.execute(
+                    update(UserReport)
+                    .where(UserReport.id == uuid.UUID(report_id))
+                    .values(
+                        status=ReportStatus.FLAGGED,
+                        ai_flag_reason=str(e),
+                    )
+                )
+                await db2.commit()
