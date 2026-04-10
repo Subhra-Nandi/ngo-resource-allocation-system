@@ -21,4 +21,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "$PORT"]
+
+# Use shell form (not array form) so $PORT gets expanded by the shell
+CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
