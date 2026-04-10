@@ -10,26 +10,23 @@ from app.models.user_report import ReportStatus, UserReport
 
 async def run_validation_gates(report_id: str):
     """
-    Two sequential validation gates:
-    Gate 1 — Is the request genuine? (AI check)
-    Gate 2 — Is the resource available? (DB check)
-    Updates report status at each step.
+    Gate 1 — AI checks if request is genuine
+    Gate 2 — DB checks if matching stock exists
     """
     async with AsyncSessionLocal() as db:
         try:
-            # Fetch the report
             result = await db.execute(
                 select(UserReport).where(UserReport.id == uuid.UUID(report_id))
             )
             report = result.scalar_one_or_none()
-
             if not report:
                 print(f"Report {report_id} not found")
                 return
 
-            # ── Gate 1: AI need validation ──────────────────────────
-            print(f"Gate 1: validating need for report {report_id}")
+            # ── Gate 1: AI validation ────────────────────────────
+            print(f"Gate 1: checking if request is genuine...")
             validation = validate_need(report.description or "")
+            print(f"Gate 1 result: {validation}")
 
             if not validation["is_valid"] and validation["confidence"] > 0.8:
                 await db.execute(
@@ -42,21 +39,23 @@ async def run_validation_gates(report_id: str):
                     )
                 )
                 await db.commit()
-                print(f"Report {report_id} flagged: {validation['reason']}")
+                print(f"Report {report_id} FLAGGED: {validation['reason']}")
                 return
 
-            # ── Gate 2: Resource availability check ─────────────────
-            print(f"Gate 2: checking resource availability for {report.need_type}")
+            # ── Gate 2: Stock check ──────────────────────────────
+            print(f"Gate 2: checking stock for {report.need_type}...")
             if report.need_type:
-                res_result = await db.execute(
+                stock = await db.execute(
                     select(NgoResource).where(
                         NgoResource.category == report.need_type,
                         NgoResource.quantity > 0,
                     ).limit(1)
                 )
-                has_stock = res_result.scalar_one_or_none() is not None
+                has_stock = stock.scalar_one_or_none() is not None
             else:
                 has_stock = False
+
+            print(f"Gate 2 result: has_stock={has_stock}")
 
             if not has_stock:
                 await db.execute(
@@ -65,30 +64,21 @@ async def run_validation_gates(report_id: str):
                     .values(status=ReportStatus.WAITLIST)
                 )
                 await db.commit()
-                print(f"Report {report_id} on waitlist — no stock for {report.need_type}")
+                print(f"Report {report_id} → WAITLIST (no stock)")
                 return
 
-            # Both gates passed — ready for GPS matching
-            await db.execute(
-                update(UserReport)
-                .where(UserReport.id == uuid.UUID(report_id))
-                .values(status=ReportStatus.VALIDATING)
-            )
-            await db.commit()
-            print(f"Report {report_id} passed both gates — ready for matching")
-
-            # Trigger GPS matching (Phase 4)
+            # Both gates passed → trigger GPS matching
+            print(f"Both gates passed → starting GPS match...")
             from app.services.matching import find_and_match_ngo
-            await find_and_match_ngo(report_id, db)
+            await find_and_match_ngo(report_id)
 
         except Exception as e:
-            print(f"Validation error for {report_id}: {e}")
+            print(f"Validation error {report_id}: {e}")
+            import traceback
+            traceback.print_exc()
             await db.execute(
                 update(UserReport)
                 .where(UserReport.id == uuid.UUID(report_id))
-                .values(
-                    status=ReportStatus.FLAGGED,
-                    ai_flag_reason=str(e),
-                )
+                .values(status=ReportStatus.FLAGGED, ai_flag_reason=str(e))
             )
             await db.commit()
