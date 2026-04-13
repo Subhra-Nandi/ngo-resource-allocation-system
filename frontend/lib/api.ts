@@ -1,6 +1,6 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// ── Auth ─────────────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────
 export async function loginNgo(email: string, password: string) {
   const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
@@ -22,10 +22,12 @@ export async function registerNgo(data: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Registration failed");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Registration failed (${res.status})`);
+  }
   return res.json();
 }
-
 // ── Dashboard ─────────────────────────────────────────────────
 export async function getDashboardSummary(token: string) {
   const res = await fetch(`${API_URL}/dashboard/summary`, {
@@ -96,16 +98,19 @@ export async function completeTask(token: string, reportId: string) {
 }
 
 // ── Resources ─────────────────────────────────────────────────
-export async function addResource(token: string, data: {
-  category: string;
-  name: string;
-  quantity: number;
-  unit?: string;
-  depot_lat: number;
-  depot_lng: number;
-  depot_address?: string;
-  depot_name?: string;
-}) {
+export async function addResource(
+  token: string,
+  data: {
+    category: string;
+    name: string;
+    quantity: number;
+    unit?: string;
+    depot_lat: number;
+    depot_lng: number;
+    depot_address?: string;
+    depot_name?: string;
+  }
+) {
   const res = await fetch(`${API_URL}/ngo/resources`, {
     method: "POST",
     headers: {
