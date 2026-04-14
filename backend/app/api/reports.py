@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.models.user_report import ReportStatus, UserReport
 from app.schemas.report import ReportAccepted, ReportStatusResponse, ReportSubmit, MatchedNgo
 from app.services.ingestion import process_text_report
+from fastapi import UploadFile, File, Form
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 
@@ -126,3 +127,83 @@ async def debug_latest(db: AsyncSession = Depends(get_db)):
         }
         for r in reports
     ]
+@router.post("/submit-audio", status_code=202, response_model=ReportAccepted)
+async def submit_audio_request(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    audio: UploadFile = File(...),
+    need_type: str = Form(default="OTHER"),
+    source: str = Form(default="affected_user"),
+    lat: float = Form(default=None),
+    lng: float = Form(default=None),
+):
+    """Accepts a voice recording, transcribes it, then runs AI pipeline."""
+    audio_bytes = await audio.read()
+
+    gps_wkt = None
+    if lat and lng:
+        gps_wkt = f"SRID=4326;POINT({lng} {lat})"
+
+    report = UserReport(
+        source=source,
+        user_gps=gps_wkt,
+        need_type=need_type,
+        description="Voice note — processing...",
+        status=ReportStatus.PENDING,
+    )
+    db.add(report)
+    await db.flush()
+    report_id = str(report.id)
+    await db.commit()
+
+    # Transcribe + process in background
+    background_tasks.add_task(
+        process_audio_report, report_id, audio_bytes, audio.filename or "audio.webm"
+    )
+
+    return ReportAccepted(
+        request_id=report.id,
+        status=ReportStatus.PENDING,
+        message="Voice note received. Transcribing...",
+    )
+
+
+@router.post("/submit-image", status_code=202, response_model=ReportAccepted)
+async def submit_image_request(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    image: UploadFile = File(...),
+    need_type: str = Form(default="OTHER"),
+    source: str = Form(default="affected_user"),
+    lat: float = Form(default=None),
+    lng: float = Form(default=None),
+    description: str = Form(default=""),
+):
+    """Accepts an image, runs OCR, then AI pipeline."""
+    image_bytes = await image.read()
+
+    gps_wkt = None
+    if lat and lng:
+        gps_wkt = f"SRID=4326;POINT({lng} {lat})"
+
+    report = UserReport(
+        source=source,
+        user_gps=gps_wkt,
+        need_type=need_type,
+        description=description or "Image submitted — processing...",
+        status=ReportStatus.PENDING,
+    )
+    db.add(report)
+    await db.flush()
+    report_id = str(report.id)
+    await db.commit()
+
+    background_tasks.add_task(
+        process_image_report, report_id, image_bytes
+    )
+
+    return ReportAccepted(
+        request_id=report.id,
+        status=ReportStatus.PENDING,
+        message="Image received. Running OCR...",
+    )

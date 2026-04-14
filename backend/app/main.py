@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, health, reports, resources
-from app.api import tasks, dashboard, feedback
+from app.api import tasks, dashboard, feedback, password_reset
 from app.core.config import settings
 from app.core.database import engine
 from app.models import ngo_resource, user_report  # noqa
@@ -45,3 +45,6 @@ app.include_router(reports.router)
 app.include_router(tasks.router)
 app.include_router(dashboard.router)
 app.include_router(feedback.router)
+
+# Password reset
+app.include_router(password_reset.router)

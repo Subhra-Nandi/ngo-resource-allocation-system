@@ -55,3 +55,73 @@ async def process_text_report(report_id: str, raw_text: str):
                     )
                 )
                 await db2.commit()
+async def process_audio_report(report_id: str, audio_bytes: bytes, filename: str):
+    """Transcribe audio → normalize → structure → validate → match."""
+    print(f"=== TRANSCRIBING AUDIO {report_id} ===")
+    async with AsyncSessionLocal() as db:
+        try:
+            from app.processors.stt import transcribe_audio
+            raw_text = transcribe_audio(audio_bytes, filename)
+            print(f"Transcribed: {raw_text[:80]}")
+
+            if not raw_text.strip():
+                await db.execute(
+                    update(UserReport)
+                    .where(UserReport.id == uuid.UUID(report_id))
+                    .values(
+                        status=ReportStatus.FLAGGED,
+                        ai_flag_reason="Could not transcribe audio"
+                    )
+                )
+                await db.commit()
+                return
+
+            await db.execute(
+                update(UserReport)
+                .where(UserReport.id == uuid.UUID(report_id))
+                .values(description=raw_text[:500])
+            )
+            await db.commit()
+
+        except Exception as e:
+            print(f"Audio transcription error: {e}")
+            raw_text = ""
+
+    if raw_text:
+        await process_text_report(report_id, raw_text)
+
+
+async def process_image_report(report_id: str, image_bytes: bytes):
+    """OCR image → normalize → structure → validate → match."""
+    print(f"=== OCR IMAGE {report_id} ===")
+    async with AsyncSessionLocal() as db:
+        try:
+            from app.processors.ocr import extract_from_image
+            raw_text = extract_from_image(image_bytes)
+            print(f"OCR result: {raw_text[:80]}")
+
+            if not raw_text.strip():
+                await db.execute(
+                    update(UserReport)
+                    .where(UserReport.id == uuid.UUID(report_id))
+                    .values(
+                        status=ReportStatus.FLAGGED,
+                        ai_flag_reason="Could not extract text from image"
+                    )
+                )
+                await db.commit()
+                return
+
+            await db.execute(
+                update(UserReport)
+                .where(UserReport.id == uuid.UUID(report_id))
+                .values(description=raw_text[:500])
+            )
+            await db.commit()
+
+        except Exception as e:
+            print(f"OCR error: {e}")
+            raw_text = ""
+
+    if raw_text:
+        await process_text_report(report_id, raw_text)                
