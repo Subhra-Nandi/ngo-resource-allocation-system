@@ -196,7 +196,7 @@ ngo-resource-dashboard/
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ngo-resource-dashboard.git
+git clone https://github.com/Subhra-Nandi/ngo-resource-dashboard.git
 cd ngo-resource-dashboard
 ```
 
