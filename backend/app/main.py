@@ -28,7 +28,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if settings.APP_ENV == "development" else [
-        "https://your-app.vercel.app"
+        "https://ngo-resource-allocation-system-b8fy.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
