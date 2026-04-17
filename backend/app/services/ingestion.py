@@ -42,19 +42,20 @@ async def process_text_report(report_id: str, raw_text: str):
             await run_validation_gates(report_id)
 
         except Exception as e:
-            print(f"=== ERROR {report_id}: {e} ===")
-            import traceback
-            traceback.print_exc()
-            async with AsyncSessionLocal() as db2:
-                await db2.execute(
-                    update(UserReport)
-                    .where(UserReport.id == uuid.UUID(report_id))
-                    .values(
-                        status=ReportStatus.FLAGGED,
-                        ai_flag_reason=str(e)
-                    )
-                )
-                await db2.commit()
+         print(f"=== ERROR {report_id}: {e} ===")
+         import traceback
+         traceback.print_exc()
+    # Don't flag immediately — set to pending so user isn't confused
+         async with AsyncSessionLocal() as db2:
+          await db2.execute(
+             update(UserReport)
+             .where(UserReport.id == uuid.UUID(report_id))
+             .values(
+                status=ReportStatus.FLAGGED,
+                ai_flag_reason=f"Processing error: {str(e)[:200]}"
+            )
+        )
+         await db2.commit()
 async def process_audio_report(report_id: str, audio_bytes: bytes, filename: str):
     """Transcribe audio → normalize → structure → validate → match."""
     print(f"=== TRANSCRIBING AUDIO {report_id} ===")

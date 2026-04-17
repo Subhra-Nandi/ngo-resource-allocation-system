@@ -2,26 +2,28 @@ import json
 from app.agents.client import call_gpt4o
 
 VALIDATION_PROMPT = """
-You are a validation agent for an NGO disaster relief platform.
+You are a validation agent for an NGO disaster relief platform in India.
 
-Assess if this help request is genuine and disaster/emergency related.
+Assess if this help request is related to disaster, emergency, or humanitarian need.
+Be GENEROUS — when in doubt, mark as valid. Real emergencies may be poorly written.
 
 Return ONLY valid JSON:
 {
   "is_valid": true or false,
   "confidence": float 0.0 to 1.0,
-  "reason": "one short sentence explaining the decision"
+  "reason": "one short sentence"
 }
 
-Mark is_valid as FALSE if:
-- It looks like a test message (e.g. "test", "hello", "abc")
-- It is clearly spam or gibberish
-- It is not related to disaster, emergency, or humanitarian need
+Mark is_valid as FALSE ONLY if:
+- It is clearly a test message like "test", "hello", "abc", "1234"
+- It is obvious spam or gibberish with no meaning
 
-Mark is_valid as TRUE if:
-- It describes a genuine emergency or humanitarian need
-- It mentions affected people, location, or specific resources needed
-- Even if poorly written — give benefit of the doubt for real emergencies
+Mark is_valid as TRUE for EVERYTHING ELSE including:
+- Any mention of food, water, medicine, shelter
+- Any mention of people needing help
+- Any mention of flood, cyclone, disaster, emergency
+- Poorly written or short descriptions that could be real
+- Non-English text (Bengali, Hindi etc.) — treat as valid
 """
 
 
