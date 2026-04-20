@@ -17,14 +17,12 @@ export default function RequestPage() {
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState("");
 
-  // Voice recording
   const [recording, setRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // Photo upload
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,25 +41,21 @@ export default function RequestPage() {
     );
   };
 
-  // ── Voice recording ──────────────────────────────────────
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
-
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
-
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         setAudioBlob(blob);
         setAudioUrl(URL.createObjectURL(blob));
         stream.getTracks().forEach((t) => t.stop());
       };
-
       mediaRecorder.start();
       setRecording(true);
     } catch {
@@ -74,12 +68,6 @@ export default function RequestPage() {
     setRecording(false);
   };
 
-  const clearAudio = () => {
-    setAudioBlob(null);
-    setAudioUrl(null);
-  };
-
-  // ── Image upload ─────────────────────────────────────────
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -91,23 +79,13 @@ export default function RequestPage() {
     setImagePreview(URL.createObjectURL(file));
   };
 
-  const clearImage = () => {
-    setImageFile(null);
-    setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  // ── Submit ───────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError("");
-
     try {
       let data: any;
-
       if (mode === "voice" && audioBlob) {
-        // Send as multipart form with audio file
         const formData = new FormData();
         formData.append("audio", audioBlob, "voice_note.webm");
         formData.append("need_type", form.need_type);
@@ -122,9 +100,7 @@ export default function RequestPage() {
         });
         if (!res.ok) throw new Error("Failed to submit voice request");
         data = await res.json();
-
       } else if (mode === "photo" && imageFile) {
-        // Send as multipart form with image file
         const formData = new FormData();
         formData.append("image", imageFile);
         formData.append("need_type", form.need_type);
@@ -139,9 +115,7 @@ export default function RequestPage() {
         });
         if (!res.ok) throw new Error("Failed to submit photo request");
         data = await res.json();
-
       } else {
-        // Plain text submission
         if (!form.description || form.description.length < 10) {
           setError("Please describe your situation (at least 10 characters)");
           setSubmitting(false);
@@ -154,7 +128,6 @@ export default function RequestPage() {
           source: "affected_user",
         });
       }
-
       setRequestId(data.request_id);
     } catch (err: any) {
       setError(err.message || "Failed to submit. Please try again.");
@@ -163,7 +136,6 @@ export default function RequestPage() {
     }
   };
 
-  // ── Status polling ───────────────────────────────────────
   useEffect(() => {
     if (!requestId) return;
     const interval = setInterval(async () => {
@@ -190,7 +162,6 @@ export default function RequestPage() {
     setMode("text");
   };
 
-  // ── Status result screen ─────────────────────────────────
   if (requestId) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
@@ -208,13 +179,15 @@ export default function RequestPage() {
 
           {status && (
             <div className="space-y-4">
-              <div className={`rounded-xl p-4 ${
-                status.status === "matched" || status.status === "dispatched"
-                  ? "bg-green-50 border border-green-200"
-                  : status.status === "waitlist"
-                  ? "bg-amber-50 border border-amber-200"
-                  : "bg-gray-50 border border-gray-200"
-              }`}>
+              <div
+                className={`rounded-xl p-4 ${
+                  status.status === "matched" || status.status === "dispatched"
+                    ? "bg-green-50 border border-green-200"
+                    : status.status === "waitlist"
+                    ? "bg-amber-50 border border-amber-200"
+                    : "bg-gray-50 border border-gray-200"
+                }`}
+              >
                 <p className="font-semibold text-gray-900 capitalize">
                   {status.status}
                 </p>
@@ -222,24 +195,92 @@ export default function RequestPage() {
               </div>
 
               {status.matched_ngo && (
-                <div className="bg-green-50 rounded-xl p-4 border border-green-200">
-                  <p className="font-semibold text-green-800 mb-3">NGO Matched!</p>
-                  <div className="space-y-2 text-sm">
-                    {[
-                      ["NGO", status.matched_ngo.ngo_name],
-                      ["Resource", status.matched_ngo.resource_name],
-                      ["ETA", `${status.matched_ngo.eta_minutes} minutes`],
-                      ["Distance", `${status.matched_ngo.distance_km} km`],
-                      ["From", status.matched_ngo.depot_address],
-                      ["Phone", status.matched_ngo.contact_phone],
-                    ]
-                      .filter(([, v]) => v)
-                      .map(([label, value]) => (
-                        <div key={label} className="flex justify-between">
-                          <span className="text-gray-500">{label}</span>
-                          <span className="font-medium text-right">{value}</span>
+                <div className="rounded-2xl overflow-hidden border border-green-200">
+                  <div className="bg-green-600 px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                        <span className="text-xl">🏥</span>
+                      </div>
+                      <div>
+                        <p className="text-xs text-green-100 font-medium uppercase tracking-wide">
+                          NGO Matched
+                        </p>
+                        <p className="text-white font-bold text-lg leading-tight">
+                          {status.matched_ngo.ngo_name}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 divide-x divide-green-100 bg-green-50">
+                    <div className="px-5 py-4 text-center">
+                      <p className="text-3xl font-bold text-green-700">
+                        {status.matched_ngo.eta_minutes}
+                      </p>
+                      <p className="text-xs text-green-600 font-medium mt-0.5">
+                        minutes ETA
+                      </p>
+                    </div>
+                    <div className="px-5 py-4 text-center">
+                      <p className="text-3xl font-bold text-green-700">
+                        {status.matched_ngo.distance_km}
+                      </p>
+                      <p className="text-xs text-green-600 font-medium mt-0.5">
+                        km away
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white px-5 py-4 space-y-3">
+                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                      <span className="text-2xl">📦</span>
+                      <div>
+                        <p className="text-xs text-gray-400 font-medium">
+                          Resource being sent
+                        </p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {status.matched_ngo.resource_name}
+                        </p>
+                      </div>
+                    </div>
+
+                    {status.matched_ngo.depot_address && (
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                        <span className="text-2xl">📍</span>
+                        <div>
+                          <p className="text-xs text-gray-400 font-medium">
+                            Dispatching from
+                          </p>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {status.matched_ngo.depot_address}
+                          </p>
                         </div>
-                      ))}
+                      </div>
+                    )}
+
+                    {status.matched_ngo.contact_phone && (
+                      <a
+                        href={`tel:${status.matched_ngo.contact_phone}`}
+                        className="flex items-center gap-3 p-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition"
+                      >
+                        <span className="text-2xl">📞</span>
+                        <div className="flex-1">
+                          <p className="text-xs text-green-600 font-medium">
+                            Call NGO directly
+                          </p>
+                          <p className="text-sm font-bold text-green-700">
+                            {status.matched_ngo.contact_phone}
+                          </p>
+                        </div>
+                        <span className="text-green-500 text-lg">→</span>
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="bg-green-50 px-5 py-3 border-t border-green-100">
+                    <p className="text-xs text-green-600 text-center">
+                      Help is on the way. Stay at your location.
+                    </p>
                   </div>
                 </div>
               )}
@@ -257,7 +298,6 @@ export default function RequestPage() {
     );
   }
 
-  // ── Main form ────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl border border-gray-200 p-8 w-full max-w-md">
@@ -274,8 +314,6 @@ export default function RequestPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-
-          {/* Need type */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               What do you need?
@@ -286,26 +324,32 @@ export default function RequestPage() {
               className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-red-400"
             >
               {NEED_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>
+                  {t}
+                </option>
               ))}
             </select>
           </div>
 
-          {/* Input mode tabs */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               How do you want to describe your situation?
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {([
-                { mode: "text", icon: "✍️", label: "Type" },
-                { mode: "voice", icon: "🎙️", label: "Voice" },
-                { mode: "photo", icon: "📷", label: "Photo" },
-              ] as { mode: InputMode; icon: string; label: string }[]).map((m) => (
+              {(
+                [
+                  { mode: "text", icon: "✍️", label: "Type" },
+                  { mode: "voice", icon: "🎙️", label: "Voice" },
+                  { mode: "photo", icon: "📷", label: "Photo" },
+                ] as { mode: InputMode; icon: string; label: string }[]
+              ).map((m) => (
                 <button
                   key={m.mode}
                   type="button"
-                  onClick={() => { setMode(m.mode); setError(""); }}
+                  onClick={() => {
+                    setMode(m.mode);
+                    setError("");
+                  }}
                   className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-xs font-medium transition ${
                     mode === m.mode
                       ? "border-red-400 bg-red-50 text-red-600"
@@ -319,7 +363,6 @@ export default function RequestPage() {
             </div>
           </div>
 
-          {/* Text mode */}
           {mode === "text" && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -327,23 +370,23 @@ export default function RequestPage() {
               </label>
               <textarea
                 value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
                 rows={4}
                 className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
-                placeholder="e.g. 50 families need food, no water since 2 days, many children sick..."
+                placeholder="e.g. 50 families need food, no water since 2 days..."
                 required={mode === "text"}
                 minLength={10}
               />
             </div>
           )}
 
-          {/* Voice mode */}
           {mode === "voice" && (
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700">
                 Record your voice note
               </label>
-
               {!audioUrl ? (
                 <button
                   type="button"
@@ -358,7 +401,9 @@ export default function RequestPage() {
                     {recording ? "⏹️" : "🎙️"}
                   </span>
                   <span className="text-sm font-medium">
-                    {recording ? "Tap to stop recording" : "Tap to start recording"}
+                    {recording
+                      ? "Tap to stop recording"
+                      : "Tap to start recording"}
                   </span>
                   {recording && (
                     <span className="flex items-center gap-1 text-xs">
@@ -378,7 +423,10 @@ export default function RequestPage() {
                   <audio controls src={audioUrl} className="w-full h-10" />
                   <button
                     type="button"
-                    onClick={clearAudio}
+                    onClick={() => {
+                      setAudioBlob(null);
+                      setAudioUrl(null);
+                    }}
                     className="text-xs text-red-500 hover:underline"
                   >
                     Record again
@@ -388,13 +436,11 @@ export default function RequestPage() {
             </div>
           )}
 
-          {/* Photo mode */}
           {mode === "photo" && (
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700">
-                Upload a photo (paper form, damaged area, etc.)
+                Upload a photo
               </label>
-
               {!imagePreview ? (
                 <div>
                   <input
@@ -432,7 +478,12 @@ export default function RequestPage() {
                     </span>
                     <button
                       type="button"
-                      onClick={clearImage}
+                      onClick={() => {
+                        setImageFile(null);
+                        setImagePreview(null);
+                        if (fileInputRef.current)
+                          fileInputRef.current.value = "";
+                      }}
                       className="text-xs text-red-500 hover:underline ml-2 shrink-0"
                     >
                       Remove
@@ -440,16 +491,16 @@ export default function RequestPage() {
                   </div>
                 </div>
               )}
-
-              {/* Optional text description for photo */}
               <div>
                 <label className="block text-xs text-gray-500 mb-1">
-                  Add description (optional — AI will read the photo)
+                  Add description (optional)
                 </label>
                 <input
                   type="text"
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, description: e.target.value })
+                  }
                   className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-red-400"
                   placeholder="Any additional context..."
                 />
@@ -457,7 +508,6 @@ export default function RequestPage() {
             </div>
           )}
 
-          {/* GPS */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Your Location
@@ -496,7 +546,6 @@ export default function RequestPage() {
             </div>
           )}
 
-          {/* Submit button */}
           <button
             type="submit"
             disabled={
