@@ -25,15 +25,6 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if settings.APP_ENV == "development" else [
-        "https://ngo-resource-allocation-system-b8fy.vercel.app"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Phase 1
 app.include_router(health.router)
@@ -45,6 +36,18 @@ app.include_router(reports.router)
 app.include_router(tasks.router)
 app.include_router(dashboard.router)
 app.include_router(feedback.router)
+
+# CORS Middleware Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"] if settings.APP_ENV == "development" else [
+        "https://ngo-resource-allocation-system.vercel.app",
+        "http://localhost:3000"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Password reset
 app.include_router(password_reset.router)
