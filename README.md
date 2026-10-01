@@ -40,27 +40,27 @@ Field worker / Affected user
    API Gateway (FastAPI)
          │
     ┌────┴────┐
-    │         │
-  OCR      Whisper STT    ← image / voice input
-    │         │
+    │          │
+  OCR   Whisper STT    ← image / voice input
+    │          │
     └────┬────┘
          │
   AI Structuring Agent (GPT-4o)
   extracts: location, need_type, severity
          │
     ┌────┴──────────────┐
-    │                   │
+    │                      │
 User Reports DB     NGO Resource DB
 (PostgreSQL+PostGIS) (PostgreSQL+PostGIS)
-    │                   │
+    │                      │
     └────────┬──────────┘
-             │
+              │
    Validation Gate 1 — AI need check (GPT-4o)
-             │
+              │
    Validation Gate 2 — Stock availability check (DB)
-             │
+              │
    GPS Nearest NGO Finder (PostGIS ST_Distance)
-             │
+              │
         ┌────┴────┐
         │         │
    User gets    NGO gets
